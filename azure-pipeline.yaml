@@ -1,0 +1,68 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+  - main #branch name
+
+pool:
+  vmImage: "windows-2022" #image where you want to deploy.
+
+stages: 
+- stage: Build
+  jobs:
+  - job: Build
+    displayName: "Install npm packages and Build"
+    workspace:
+      clean: all
+    steps:
+      - checkout: self
+        submodules: true
+      - task: NodeTool@0
+        inputs:
+          versionSpec: '14.x'
+          checkLatest: true
+        displayName: 'Install Node.js'
+
+      - script: |
+          npm install
+        displayName: 'Install dependencies'
+      
+      - script: |
+          npm run build
+        displayName: 'Build'
+
+      - task: CopyFiles@2
+        inputs:
+          SourceFolder: '$(System.DefaultWorkingDirectory)/build'
+          Contents: '**'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)'
+          OverWrite: true
+        displayName: 'Copy build files to artifacts'
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+          ArtifactName: 'drop'
+          publishLocation: 'Container'
+        displayName: 'Publish Artifact'
+
+- stage: Deploy
+  jobs:
+    - job: Deploy
+      displayName: Deploying
+      steps:
+      - task: DownloadPipelineArtifact@2
+        inputs:
+          source: 'current'
+          artifact: 'drop'
+          path: '$(Pipeline.Workspace)'
+
+      - task: AzureRmWebAppDeployment@4
+        inputs:
+          ConnectionType: 'AzureRM' #Connection type
+          azureSubscription: '<your_azure_subscription>'
+          appType: 'webApp'  #Required when ConnectionType = AzureRM. App Service type
+          WebAppName: '<your_web_app_name>' #<App Service Name.>
+          packageForLinux: '$(Pipeline.Workspace)'
